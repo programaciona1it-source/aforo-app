@@ -740,32 +740,40 @@ function cancelarFotos() {
 /* ═══════════════════════════════════════════════
    GUARDAR REGISTRO EN EL BACKEND
    ═══════════════════════════════════════════════ */
-async function guardarRegistro() {
+async function guardarRegistro(esReintento = false, logIdExistente = null) {
   if (!fotoPaqueteBlob || !fotoEtiquetaBlob || !codigoEscaneado || !categoriaActual) return;
 
   const btn = document.getElementById("btn-guardar");
   btn.disabled = true;
-  btn.textContent = "Guardando...";
+  btn.textContent = esReintento ? "Reintentando..." : "Guardando...";
 
-  logSeq++;
-  const id = "li" + logSeq;
-  const hora = new Date().toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  const label = codigoInfo.tipo === "guia" ? "GUÍA " + codigoInfo.guia : "ID " + codigoInfo.qr_id;
+  let id = logIdExistente;
+  if (!esReintento) {
+    logSeq++;
+    id = "li" + logSeq;
+    const hora = new Date().toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const label = codigoInfo.tipo === "guia" ? "GUÍA " + codigoInfo.guia : "ID " + codigoInfo.qr_id;
 
-  document.getElementById("log-empty").style.display = "none";
-  const log = document.getElementById("log");
-  const item = document.createElement("div");
-  item.className = "log-item sending";
-  item.id = id;
-  item.innerHTML = `
-    <div class="log-ico" id="${id}-ico"><span class="spin">⟳</span></div>
-    <div class="log-info">
-      <div class="log-nombre">📦 [${categoriaActual}] ${label}</div>
-      <div class="log-sub" id="${id}-sub">Subiendo fotos...</div>
-    </div>
-    <div class="log-ts">${hora}</div>
-  `;
-  log.prepend(item);
+    document.getElementById("log-empty").style.display = "none";
+    const log = document.getElementById("log");
+    const item = document.createElement("div");
+    item.className = "log-item sending";
+    item.id = id;
+    item.innerHTML = `
+      <div class="log-ico" id="${id}-ico"><span class="spin">⟳</span></div>
+      <div class="log-info">
+        <div class="log-nombre">📦 [${categoriaActual}] ${label}</div>
+        <div class="log-sub" id="${id}-sub">Subiendo fotos...</div>
+      </div>
+      <div class="log-ts">${hora}</div>
+    `;
+    log.prepend(item);
+  } else {
+    const subEl = document.getElementById(id + "-sub");
+    if (subEl) subEl.textContent = "Reintentando…";
+  }
+
+  const item = document.getElementById(id);
 
   try {
     const formData = new FormData();
@@ -786,7 +794,7 @@ async function guardarRegistro() {
     document.getElementById("cnt").textContent = contadorHoy;
     document.getElementById(id + "-ico").innerHTML = "✅";
     document.getElementById(id + "-sub").textContent = `✓ Guardado — Peso: ${data.peso}kg`;
-    item.className = "log-item ok";
+    if (item) item.className = "log-item ok";
     toast("Registro guardado exitosamente", "ok");
     flashScreen();
     vibrar([60, 40, 80]);
@@ -794,13 +802,19 @@ async function guardarRegistro() {
     mostrarPantalla("screen-categoria");
 
   } catch (err) {
+    // Si es un error de red (no de validación) y todavía no reintentamos, probar una vez más solo
+    if (!esReintento && (err.message === "Failed to fetch" || err instanceof TypeError)) {
+      setTimeout(() => guardarRegistro(true, id), 1500);
+      return;
+    }
+
     let mensajeError = err.message;
     if (err.message === "Failed to fetch" || err instanceof TypeError) {
       mensajeError = "No se pudo conectar al servidor. Verificá tu conexión a internet o que el servidor esté funcionando.";
     }
     document.getElementById(id + "-ico").innerHTML = "❌";
     document.getElementById(id + "-sub").textContent = "Error: " + mensajeError;
-    item.className = "log-item err";
+    if (item) item.className = "log-item err";
     toast("Error al guardar: " + mensajeError, "err");
     btn.disabled = false;
     btn.textContent = "Guardar registro";
