@@ -318,11 +318,22 @@
 <div class="toast" id="toast"></div>
 <div class="screen-flash" id="flash"></div>
 
+<!-- ═══════ MODAL: NOMBRE DEL OPERARIO (se pide al abrir la app) ═══════ -->
+<div class="modal-bg open" id="modal-operario" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:18px;padding:24px 20px;width:100%;max-width:340px;">
+    <div style="font-size:32px;text-align:center;margin-bottom:10px;">👤</div>
+    <div style="font-size:16px;font-weight:800;text-align:center;margin-bottom:6px;">¿Quién está aforando?</div>
+    <div style="font-size:11px;color:var(--text2);font-family:var(--mono);text-align:center;margin-bottom:16px;">Se va a registrar en cada paquete que guardes</div>
+    <input id="input-operario" class="modal-input" placeholder="Tu nombre" autocomplete="off" style="width:100%;padding:13px 14px;background:var(--bg);border:1.5px solid var(--border);color:var(--text);font-family:var(--sans);font-size:14px;border-radius:10px;margin-bottom:14px;text-align:center;">
+    <button class="btn-primary" onclick="confirmarOperario()">Continuar</button>
+  </div>
+</div>
+
 <script>
 /* ═══════════════════════════════════════════════
    CONFIG
    ═══════════════════════════════════════════════ */
-const API_BASE = "http://72.62.101.204:8002";
+const API_BASE = "https://aforo.duckdns.org:8002";
 
 const COLORES_CAT = { A: "var(--cat-a)", B: "var(--cat-b)", C: "var(--cat-c)", D: "var(--cat-d)", E: "var(--cat-e)" };
 
@@ -330,6 +341,7 @@ const COLORES_CAT = { A: "var(--cat-a)", B: "var(--cat-b)", C: "var(--cat-c)", D
    ESTADO GLOBAL
    ═══════════════════════════════════════════════ */
 let categorias = [];          // [{letra, peso}]
+let operarioActual = null;    // nombre ingresado al abrir la app, válido durante toda la sesión
 let categoriaActual = null;   // "A".."E"
 let codigoEscaneado = null;   // texto crudo escaneado
 let codigoInfo = null;        // {tipo, guia, qr_id, qr_json}
@@ -391,17 +403,26 @@ function vibrar(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch 
 async function cargarCategorias() {
   try {
     const res = await fetch(`${API_BASE}/aforo/categorias`);
+    if (!res.ok) throw new Error(`El servidor respondió con error ${res.status}`);
     const data = await res.json();
     categorias = data.categorias;
+    renderizarCategorias();
   } catch (e) {
-    toast("No se pudo conectar al servidor", "err");
-    // Fallback local para no bloquear el uso si el backend está caído momentáneamente
-    categorias = [
-      { letra: "A", peso: 20 }, { letra: "B", peso: 35 }, { letra: "C", peso: 45 },
-      { letra: "D", peso: 8 }, { letra: "E", peso: 5 },
-    ];
+    mostrarErrorConexion(e);
   }
-  renderizarCategorias();
+}
+
+function mostrarErrorConexion(e) {
+  const grid = document.getElementById("cat-grid");
+  grid.innerHTML = `
+    <div style="grid-column: 1 / -1; background: rgba(255,68,85,0.08); border: 2px solid var(--err); border-radius: 16px; padding: 20px; text-align: center;">
+      <div style="font-size: 32px; margin-bottom: 8px;">⚠️</div>
+      <div style="font-weight: 800; color: var(--err); margin-bottom: 8px;">No se pudo conectar al servidor</div>
+      <div style="font-family: var(--mono); font-size: 11px; color: var(--text2); margin-bottom: 4px;">URL: ${API_BASE}/aforo/categorias</div>
+      <div style="font-family: var(--mono); font-size: 11px; color: var(--text2); margin-bottom: 14px;">Error técnico: ${e.message || e.name || e}</div>
+      <button class="btn-primary" style="width:auto;padding:10px 24px;" onclick="cargarCategorias()">Reintentar</button>
+    </div>
+  `;
 }
 
 function renderizarCategorias() {
@@ -750,6 +771,7 @@ async function guardarRegistro() {
     const formData = new FormData();
     formData.append("categoria", categoriaActual);
     formData.append("codigo", codigoEscaneado);
+    if (operarioActual) formData.append("operario", operarioActual);
     formData.append("foto_paquete", fotoPaqueteBlob, "paquete.jpg");
     formData.append("foto_etiqueta", fotoEtiquetaBlob, "etiqueta.jpg");
 
@@ -786,10 +808,30 @@ async function guardarRegistro() {
 }
 
 /* ═══════════════════════════════════════════════
+   NOMBRE DEL OPERARIO
+   ═══════════════════════════════════════════════ */
+function confirmarOperario() {
+  const input = document.getElementById("input-operario");
+  const valor = input.value.trim();
+  if (!valor) {
+    input.style.borderColor = "var(--err)";
+    input.placeholder = "Ingresá tu nombre para continuar";
+    return;
+  }
+  operarioActual = valor;
+  document.getElementById("modal-operario").style.display = "none";
+}
+
+/* ═══════════════════════════════════════════════
    INIT
    ═══════════════════════════════════════════════ */
 (async () => {
   document.getElementById("log").addEventListener("click", () => {}); // noop, evita warning lint
+
+  const inputOperario = document.getElementById("input-operario");
+  inputOperario.addEventListener("keydown", (e) => { if (e.key === "Enter") confirmarOperario(); });
+  setTimeout(() => inputOperario.focus(), 300);
+
   await cargarCategorias();
 })();
 </script>
