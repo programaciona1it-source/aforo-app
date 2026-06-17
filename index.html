@@ -444,11 +444,15 @@ function elegirCategoria(letra) {
   iniciarH5();
 }
 
-function cambiarModoEscaneo(modo) {
-  if (modo === modoEscaneo) return;
+async function cambiarModoEscaneo(modo) {
+  if (modo === modoEscaneo || cambiandoModo) return;
+  cambiandoModo = true;
   modoEscaneo = modo;
   actualizarUIModo();
-  iniciarH5(); // reinicia el scanner con el qrbox/formato adecuado al nuevo modo
+  setStatus("scan", "Cambiando cámara…", "Un momento");
+  await iniciarH5();
+  actualizarUIModo();
+  cambiandoModo = false;
 }
 
 function actualizarUIModo() {
@@ -492,6 +496,7 @@ function setStatus(dot, main, hint) {
    ═══════════════════════════════════════════════ */
 async function iniciarH5() {
   await detener();
+  await new Promise(resolve => setTimeout(resolve, 250)); // pequeño respiro para que el navegador libere la cámara anterior
   nativo = false;
   h5scanner = new Html5Qrcode("reader");
 
@@ -543,10 +548,21 @@ async function iniciarH5() {
   }
 }
 
+let cambiandoModo = false; // evita reinicios simultáneos de cámara si se toca el toggle muy rápido
+
 async function detener() {
   if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-  if (h5scanner) { try { await h5scanner.stop(); } catch {} h5scanner = null; }
+  if (h5scanner) {
+    try {
+      const estado = h5scanner.getState ? h5scanner.getState() : null;
+      if (estado === undefined || estado === 2 /* SCANNING */) {
+        await h5scanner.stop();
+      }
+    } catch {}
+    try { h5scanner.clear(); } catch {}
+    h5scanner = null;
+  }
   const r = document.getElementById("reader");
   if (r) r.innerHTML = "";
 }
@@ -756,10 +772,14 @@ async function guardarRegistro() {
     mostrarPantalla("screen-categoria");
 
   } catch (err) {
+    let mensajeError = err.message;
+    if (err.message === "Failed to fetch" || err instanceof TypeError) {
+      mensajeError = "No se pudo conectar al servidor. Verificá tu conexión a internet o que el servidor esté funcionando.";
+    }
     document.getElementById(id + "-ico").innerHTML = "❌";
-    document.getElementById(id + "-sub").textContent = "Error: " + err.message;
+    document.getElementById(id + "-sub").textContent = "Error: " + mensajeError;
     item.className = "log-item err";
-    toast("Error al guardar: " + err.message, "err");
+    toast("Error al guardar: " + mensajeError, "err");
     btn.disabled = false;
     btn.textContent = "Guardar registro";
   }

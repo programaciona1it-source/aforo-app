@@ -1,6 +1,6 @@
 // Service Worker mínimo: cachea solo la shell de la app para que abra rápido.
 // No cachea llamadas a la API (siempre necesita conexión para guardar/consultar).
-const CACHE_NAME = "aforo-shell-v1";
+const CACHE_NAME = "aforo-shell-v2";
 const SHELL_FILES = [
   "./index.html",
   "./manifest.json",
@@ -30,7 +30,15 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Network-first: siempre intenta traer la versión más nueva primero.
+  // Si no hay conexión, recién ahí usa lo que tenga cacheado.
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    fetch(event.request)
+      .then((response) => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
