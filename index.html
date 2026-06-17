@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#080c10">
+  <title>Aforo · Scanner</title>
+
+  <link rel="manifest" href="manifest.json">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Aforo">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;900&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    :root {
+      --bg: #080c10; --bg2: #0e1318; --bg3: #141b22;
+      --border: #1e2d3d; --border2: #2a3d52;
+      --accent: #00d4ff; --accent-d: #0099bb;
+      --ok: #00e676; --ok-d: #00b058;
+      --err: #ff4455; --warn: #ffaa00;
+      --text: #e8f0f8; --text2: #8fa8c0; --text3: #4a6278;
+      --mono: 'JetBrains Mono', monospace; --sans: 'Inter', -apple-system, sans-serif;
+
+      /* Colores por categoría — distintivos para que el operario los reconozca rápido */
+      --cat-a: #00d4ff;
+      --cat-b: #a78bfa;
+      --cat-c: #fbbf24;
+      --cat-d: #34d399;
+      --cat-e: #fb7185;
+    }
+
+    html, body { height: 100%; overflow: hidden; }
+    body { background: var(--bg); color: var(--text); font-family: var(--sans); display: flex; flex-direction: column; height: 100dvh; }
+
+    /* ── HEADER ── */
+    header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--bg2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-icon { width: 32px; height: 32px; background: linear-gradient(135deg, var(--accent) 0%, #0066ff 100%); border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; box-shadow: 0 0 16px rgba(0,212,255,0.3); }
+    .brand-text { font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+    .brand-sub { font-size: 9px; color: var(--text3); font-family: var(--mono); letter-spacing: 0.5px; }
+    .counter-badge { display: flex; align-items: center; gap: 6px; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; padding: 5px 12px; font-family: var(--mono); font-size: 11px; color: var(--text2); }
+    .counter-badge .num { color: var(--ok); font-weight: 700; font-size: 13px; }
+
+    /* ── PANTALLAS (cambian con JS, una visible a la vez) ── */
+    .screen { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+    .screen.active { display: flex; }
+
+    /* ── PANTALLA: CATEGORIAS ── */
+    #screen-categoria { padding: 16px; gap: 12px; overflow-y: auto; }
+    .cat-title { font-size: 15px; font-weight: 800; margin-bottom: 4px; }
+    .cat-sub { font-size: 11px; color: var(--text2); font-family: var(--mono); margin-bottom: 14px; }
+    .cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .cat-btn {
+      position: relative;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 6px; padding: 22px 10px; background: var(--bg2); border: 2px solid var(--border);
+      border-radius: 16px; cursor: pointer; transition: all 0.15s; overflow: hidden;
+    }
+    .cat-btn:active { transform: scale(0.96); }
+    .cat-btn::before { content:''; position:absolute; inset:0; opacity:0.08; background: var(--cat-color); }
+    .cat-letra { font-family: var(--mono); font-size: 30px; font-weight: 700; color: var(--cat-color); z-index: 1; }
+    .cat-peso { font-size: 11px; color: var(--text2); font-family: var(--mono); z-index: 1; }
+    .cat-btn.full { grid-column: span 2; }
+
+    /* ── STEPS BAR ── */
+    #steps-bar { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 10px 14px; flex-shrink: 0; }
+    .steps-row { display: flex; align-items: center; gap: 0; }
+    .step-item { display: flex; align-items: center; gap: 8px; flex: 1; }
+    .step-bubble { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; font-family: var(--mono); flex-shrink: 0; color: var(--text3); transition: all 0.35s ease; }
+    .step-bubble.active { border-color: var(--accent); color: var(--accent); background: rgba(0,212,255,0.08); box-shadow: 0 0 14px rgba(0,212,255,0.25); }
+    .step-bubble.done { border-color: var(--ok); background: var(--ok); color: #000; font-size: 12px; }
+    .step-title { font-size: 9px; font-weight: 700; color: var(--text3); transition: color 0.3s; text-transform: uppercase; letter-spacing: 0.4px; }
+    .step-title.active { color: var(--accent); } .step-title.done { color: var(--ok); }
+    .step-line { width: 18px; height: 2px; background: var(--border); border-radius: 2px; flex-shrink: 0; margin: 0 4px; transition: background 0.4s; }
+    .step-line.done { background: var(--ok); }
+
+    .cat-pill {
+      display: inline-flex; align-items: center; gap: 6px; background: var(--bg3);
+      border: 1px solid var(--border2); border-radius: 20px; padding: 4px 12px;
+      font-family: var(--mono); font-size: 11px; font-weight: 700; margin-bottom: 10px;
+    }
+    .cat-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cat-color); }
+
+    /* ── CAMERA (escaneo) ── */
+    .camera-section { position: relative; background: #000; flex-shrink: 0; overflow: hidden; }
+    #reader { width: 100%; height: 100%; }
+    #reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; display: block; }
+    #reader canvas, #reader img { display: none !important; }
+    #reader > div { border: none !important; }
+
+    .cam-overlay { position: absolute; inset: 0; pointer-events: none; display: flex; align-items: center; justify-content: center; }
+    .cam-overlay::before { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
+    .scan-frame { position: relative; z-index: 2; width: 90%; height: 130px; transition: all 0.3s; }
+    .scan-frame .c { position: absolute; width: 22px; height: 22px; }
+    .scan-frame .c::before, .scan-frame .c::after { content: ''; position: absolute; background: var(--accent); }
+    .scan-frame .c-tl { top: 0; left: 0; } .scan-frame .c-tl::before { top:0; left:0; width:100%; height:3px; border-radius:3px 0 0 0; } .scan-frame .c-tl::after { top:0; left:0; width:3px; height:100%; border-radius:3px 0 0 0; }
+    .scan-frame .c-tr { top: 0; right: 0; } .scan-frame .c-tr::before { top:0; right:0; width:100%; height:3px; border-radius:0 3px 0 0; } .scan-frame .c-tr::after { top:0; right:0; width:3px; height:100%; border-radius:0 3px 0 0; }
+    .scan-frame .c-bl { bottom: 0; left: 0; } .scan-frame .c-bl::before { bottom:0; left:0; width:100%; height:3px; border-radius:0 0 0 3px; } .scan-frame .c-bl::after { bottom:0; left:0; width:3px; height:100%; border-radius:0 0 0 3px; }
+    .scan-frame .c-br { bottom: 0; right: 0; } .scan-frame .c-br::before { bottom:0; right:0; width:100%; height:3px; border-radius:0 0 3px 0; } .scan-frame .c-br::after { bottom:0; right:0; width:3px; height:100%; border-radius:0 0 3px 0; }
+    .scan-beam { position: absolute; left: 3px; right: 3px; height: 2px; background: linear-gradient(90deg, transparent 0%, var(--accent) 30%, #fff 50%, var(--accent) 70%, transparent 100%); border-radius: 2px; animation: beamMove 2s ease-in-out infinite; box-shadow: 0 0 8px var(--accent); }
+    @keyframes beamMove { 0% { top: 10%; opacity: 0.6; } 50% { top: 85%; opacity: 1; } 100% { top: 10%; opacity: 0.6; } }
+
+    /* ── STATUS BAR ── */
+    .status-bar { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 9px 14px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; min-height: 50px; transition: border-color 0.3s; }
+    .status-bar.s-ok { border-bottom-color: var(--ok); } .status-bar.s-err { border-bottom-color: var(--err); } .status-bar.s-warn { border-bottom-color: var(--warn); }
+    .status-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: dotPulse 1.2s ease-in-out infinite; }
+    .status-dot.ok { background: var(--ok); box-shadow: 0 0 8px var(--ok); animation: none; }
+    .status-dot.err { background: var(--err); box-shadow: 0 0 8px var(--err); animation: none; }
+    .status-dot.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); animation: none; }
+    @keyframes dotPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } }
+    .status-content { flex: 1; min-width: 0; }
+    .status-main { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .status-hint { font-size: 10px; color: var(--text2); margin-top: 2px; font-family: var(--mono); }
+
+    /* ── ACTIONS ── */
+    .actions { display: flex; gap: 8px; padding: 8px 12px; background: var(--bg2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .btn-act { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 6px; background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.5px; color: var(--text2); cursor: pointer; transition: all 0.15s; text-transform: uppercase; }
+    .btn-act:active { transform: scale(0.94); background: var(--border); }
+    .btn-act.danger { color: var(--err); }
+
+    /* ── PANTALLA: FOTOS ── */
+    #screen-foto { padding: 16px; gap: 14px; }
+    .foto-box {
+      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 14px; border: 2px dashed var(--border2); border-radius: 16px; background: var(--bg2);
+      cursor: pointer; transition: all 0.15s; overflow: hidden; position: relative;
+    }
+    .foto-box:active { transform: scale(0.98); }
+    .foto-box.lleno { border-style: solid; border-color: var(--ok); }
+    .foto-box img { width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; }
+    .foto-icon { font-size: 40px; opacity: 0.4; z-index: 1; }
+    .foto-label { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--text2); z-index: 1; text-transform: uppercase; letter-spacing: 0.5px; }
+    .foto-check { position: absolute; top: 10px; right: 10px; width: 30px; height: 30px; border-radius: 50%; background: var(--ok); display: flex; align-items: center; justify-content: center; font-size: 16px; color: #000; z-index: 2; }
+
+    /* ── BOTONES PRIMARIOS ── */
+    .btn-primary {
+      width: 100%; padding: 16px; background: var(--accent); color: #000; border: none;
+      border-radius: 14px; font-family: var(--sans); font-size: 14px; font-weight: 800;
+      cursor: pointer; transition: all 0.15s; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .btn-primary:active { transform: scale(0.97); }
+    .btn-primary:disabled { background: var(--border2); color: var(--text3); cursor: not-allowed; }
+    .btn-secondary {
+      width: 100%; padding: 13px; background: var(--bg3); color: var(--text2); border: 1px solid var(--border);
+      border-radius: 12px; font-family: var(--sans); font-size: 12px; font-weight: 700; cursor: pointer;
+    }
+
+    /* ── LOG ── */
+    .log-wrap { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--bg); }
+    .log-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text3); padding: 20px; text-align: center; }
+    .log-empty-icon { font-size: 38px; opacity: 0.25; }
+    .log-empty-text { font-size: 12px; font-family: var(--mono); line-height: 1.6; }
+    .log-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--bg2); border-left: 3px solid transparent; animation: slideIn 0.28s ease; }
+    .log-item.ok { border-left-color: var(--ok); } .log-item.err { border-left-color: var(--err); } .log-item.sending { border-left-color: var(--accent); }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
+    .log-ico { font-size: 18px; flex-shrink: 0; }
+    .log-info { flex: 1; min-width: 0; }
+    .log-nombre { font-size: 12px; font-weight: 700; font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .log-sub { font-size: 9px; color: var(--text2); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); }
+    .log-ts { font-size: 9px; color: var(--text3); font-family: var(--mono); flex-shrink: 0; }
+
+    /* ── TOAST ── */
+    .toast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%) translateY(-80px); background: var(--bg2); border: 1px solid var(--border2); border-radius: 30px; padding: 9px 18px; font-size: 12px; font-weight: 600; font-family: var(--mono); z-index: 200; transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.35s; white-space: nowrap; pointer-events: none; opacity: 0; display: flex; align-items: center; gap: 8px; }
+    .toast.visible { transform: translateX(-50%) translateY(0); opacity: 1; }
+    .toast.ok { border-color: var(--ok); color: var(--ok); } .toast.err { border-color: var(--err); color: var(--err); } .toast.warn { border-color: var(--warn); color: var(--warn); }
+
+    .screen-flash { position: fixed; inset: 0; background: rgba(0,212,255,0.12); pointer-events: none; z-index: 50; opacity: 0; transition: opacity 0.08s; }
+    .screen-flash.active { opacity: 1; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { display: inline-block; animation: spin 0.8s linear infinite; }
+
+    .log-wrap::-webkit-scrollbar { width: 4px; }
+    .log-wrap::-webkit-scrollbar-track { background: transparent; }
+    .log-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-icon">📦</div>
+    <div>
+      <div class="brand-text">Aforo</div>
+      <div class="brand-sub">Logística · v3.0</div>
+    </div>
+  </div>
+  <div class="counter-badge">✓ <span class="num" id="cnt">0</span> hoy</div>
+</header>
+
+<!-- ═══════ PANTALLA 1: CATEGORÍA ═══════ -->
+<div class="screen active" id="screen-categoria">
+  <div class="cat-title">Elegí la categoría</div>
+  <div class="cat-sub">El peso se asigna automáticamente</div>
+  <div class="cat-grid" id="cat-grid">
+    <!-- Generado por JS según /aforo/categorias -->
+  </div>
+</div>
+
+<!-- ═══════ PANTALLA 2: ESCANEO ═══════ -->
+<div class="screen" id="screen-scan">
+  <div id="steps-bar">
+    <div class="cat-pill" id="cat-pill-scan"><span class="dot"></span><span id="cat-pill-text"></span></div>
+    <div class="steps-row">
+      <div class="step-item">
+        <div class="step-bubble active" id="sb1">1</div>
+        <div class="step-title active" id="st1">Escaneo</div>
+      </div>
+      <div class="step-line" id="sl1"></div>
+      <div class="step-item">
+        <div class="step-bubble" id="sb2">2</div>
+        <div class="step-title" id="st2">Foto paquete</div>
+      </div>
+      <div class="step-line" id="sl2"></div>
+      <div class="step-item">
+        <div class="step-bubble" id="sb3">3</div>
+        <div class="step-title" id="st3">Foto etiqueta</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="camera-section" id="cam-section">
+    <div id="reader"></div>
+    <div class="cam-overlay">
+      <div class="scan-frame" id="scan-frame">
+        <div class="c c-tl"></div><div class="c c-tr"></div><div class="c c-bl"></div><div class="c c-br"></div>
+        <div class="scan-beam"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="status-bar" id="status-bar">
+    <div class="status-dot" id="status-dot"></div>
+    <div class="status-content">
+      <div class="status-main" id="status-main">Iniciando cámara...</div>
+      <div class="status-hint" id="status-hint">Guía (45XXXXXXX) o QR del paquete</div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn-act" onclick="capturarFotoScan()"><span>📷</span><span>Foto del código</span></button>
+    <button class="btn-act" onclick="abrirManual()"><span>⌨️</span><span>Manual</span></button>
+    <button class="btn-act danger" onclick="volverACategoria()" title="Cambiar categoría">↺</button>
+  </div>
+</div>
+
+<!-- ═══════ PANTALLA 3: FOTOS ═══════ -->
+<div class="screen" id="screen-foto">
+  <div id="steps-bar-foto" style="background:var(--bg2);border-bottom:1px solid var(--border);margin:-16px -16px 0;padding:10px 14px;">
+    <div class="cat-pill" id="cat-pill-foto"><span class="dot"></span><span id="cat-pill-text2"></span></div>
+    <div class="steps-row">
+      <div class="step-item">
+        <div class="step-bubble done">✓</div>
+        <div class="step-title done">Escaneo</div>
+      </div>
+      <div class="step-line done"></div>
+      <div class="step-item">
+        <div class="step-bubble" id="sbf2">2</div>
+        <div class="step-title" id="stf2">Foto paquete</div>
+      </div>
+      <div class="step-line" id="slf2"></div>
+      <div class="step-item">
+        <div class="step-bubble" id="sbf3">3</div>
+        <div class="step-title" id="stf3">Foto etiqueta</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foto-box" id="box-paquete" onclick="capturarFotoPaquete()">
+    <div class="foto-icon">📦</div>
+    <div class="foto-label">Foto del paquete completo</div>
+  </div>
+
+  <div class="foto-box" id="box-etiqueta" onclick="capturarFotoEtiqueta()">
+    <div class="foto-icon">🏷️</div>
+    <div class="foto-label">Foto de la etiqueta</div>
+  </div>
+
+  <button class="btn-primary" id="btn-guardar" disabled onclick="guardarRegistro()">Guardar registro</button>
+  <button class="btn-secondary" onclick="cancelarFotos()" style="margin-top:8px;">Cancelar y reiniciar</button>
+</div>
+
+<!-- ═══════ LOG (siempre visible debajo, salvo en pantalla categoría) ═══════ -->
+<div class="log-wrap" id="log" style="display:none;">
+  <div class="log-empty" id="log-empty">
+    <div class="log-empty-icon">📋</div>
+    <div class="log-empty-text">Aquí aparecen los<br>registros guardados</div>
+  </div>
+</div>
+
+<input type="file" id="file-scan" accept="image/*" capture="environment" style="display:none" onchange="procesarFotoScan(event)">
+<input type="file" id="file-paquete" accept="image/*" capture="environment" style="display:none" onchange="procesarFotoPaquete(event)">
+<input type="file" id="file-etiqueta" accept="image/*" capture="environment" style="display:none" onchange="procesarFotoEtiqueta(event)">
+
+<div class="toast" id="toast"></div>
+<div class="screen-flash" id="flash"></div>
+
+<script>
+/* ═══════════════════════════════════════════════
+   CONFIG
+   ═══════════════════════════════════════════════ */
+const API_BASE = "http://72.62.101.204:8002";
+
+const COLORES_CAT = { A: "var(--cat-a)", B: "var(--cat-b)", C: "var(--cat-c)", D: "var(--cat-d)", E: "var(--cat-e)" };
+
+/* ═══════════════════════════════════════════════
+   ESTADO GLOBAL
+   ═══════════════════════════════════════════════ */
+let categorias = [];          // [{letra, peso}]
+let categoriaActual = null;   // "A".."E"
+let codigoEscaneado = null;   // texto crudo escaneado
+let codigoInfo = null;        // {tipo, guia, qr_id, qr_json}
+let fotoPaqueteBlob = null;
+let fotoEtiquetaBlob = null;
+let contadorHoy = 0;
+let escaneando = false;
+let lastTxt = "";
+let lastTs = 0;
+let nativo = false;
+let detector = null;
+let stream = null;
+let rafId = null;
+let h5scanner = null;
+let logSeq = 0;
+
+/* ═══════════════════════════════════════════════
+   VALIDACIONES (mismas reglas que el backend)
+   ═══════════════════════════════════════════════ */
+function esGuia(txt) { return /^45\d{7}$/.test(txt.trim()); }
+
+function parsearQR(txt) {
+  try {
+    let s = txt.trim().replace(/'/g, '"');
+    if (!s.startsWith('{')) s = '{' + s + '}';
+    const obj = JSON.parse(s);
+    const ok = obj.id && obj.sender_id && obj.hash_code && obj.security_digit !== undefined;
+    if (ok) return { valido: true, id: String(obj.id), obj };
+  } catch {}
+  return { valido: false };
+}
+
+function clasificarCodigo(txt) {
+  txt = txt.trim();
+  if (esGuia(txt)) return { tipo: "guia", guia: txt, qr_id: null, qr_json: null };
+  const qr = parsearQR(txt);
+  if (qr.valido) return { tipo: "qr", guia: null, qr_id: qr.id, qr_json: txt };
+  return null;
+}
+
+/* ═══════════════════════════════════════════════
+   FEEDBACK
+   ═══════════════════════════════════════════════ */
+let toastTimer;
+function toast(msg, tipo = "ok") {
+  const el = document.getElementById("toast");
+  clearTimeout(toastTimer);
+  el.className = "toast visible " + tipo;
+  el.textContent = (tipo === "ok" ? "✓  " : tipo === "err" ? "✗  " : "⚠  ") + msg;
+  toastTimer = setTimeout(() => el.classList.remove("visible"), 2800);
+}
+function flashScreen() { const f = document.getElementById("flash"); f.classList.add("active"); setTimeout(() => f.classList.remove("active"), 160); }
+function vibrar(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch {} }
+
+/* ═══════════════════════════════════════════════
+   CARGAR CATEGORÍAS DESDE EL BACKEND
+   ═══════════════════════════════════════════════ */
+async function cargarCategorias() {
+  try {
+    const res = await fetch(`${API_BASE}/aforo/categorias`);
+    const data = await res.json();
+    categorias = data.categorias;
+  } catch (e) {
+    toast("No se pudo conectar al servidor", "err");
+    // Fallback local para no bloquear el uso si el backend está caído momentáneamente
+    categorias = [
+      { letra: "A", peso: 20 }, { letra: "B", peso: 35 }, { letra: "C", peso: 45 },
+      { letra: "D", peso: 8 }, { letra: "E", peso: 5 },
+    ];
+  }
+  renderizarCategorias();
+}
+
+function renderizarCategorias() {
+  const grid = document.getElementById("cat-grid");
+  grid.innerHTML = "";
+  categorias.forEach((cat, i) => {
+    const btn = document.createElement("div");
+    btn.className = "cat-btn" + (categorias.length % 2 !== 0 && i === categorias.length - 1 ? " full" : "");
+    btn.style.setProperty("--cat-color", COLORES_CAT[cat.letra] || "var(--accent)");
+    btn.innerHTML = `<div class="cat-letra">${cat.letra}</div><div class="cat-peso">${cat.peso} kg</div>`;
+    btn.onclick = () => elegirCategoria(cat.letra);
+    grid.appendChild(btn);
+  });
+}
+
+/* ═══════════════════════════════════════════════
+   NAVEGACIÓN ENTRE PANTALLAS
+   ═══════════════════════════════════════════════ */
+function mostrarPantalla(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  document.getElementById("log").style.display = id === "screen-categoria" ? "block" : "none";
+}
+
+function elegirCategoria(letra) {
+  categoriaActual = letra;
+  codigoEscaneado = null;
+  codigoInfo = null;
+  fotoPaqueteBlob = null;
+  fotoEtiquetaBlob = null;
+
+  const color = COLORES_CAT[letra] || "var(--accent)";
+  document.querySelectorAll("#cat-pill-scan, #cat-pill-foto").forEach(p => p.style.setProperty("--cat-color", color));
+  document.getElementById("cat-pill-text").textContent = `Categoría ${letra}`;
+  document.getElementById("cat-pill-text2").textContent = `Categoría ${letra}`;
+
+  mostrarPantalla("screen-scan");
+  setStatus("scan", "Buscando código…", "Guía (45XXXXXXX) o QR del paquete");
+  iniciarH5();
+}
+
+function volverACategoria() {
+  if (confirm("¿Volver a elegir categoría? Se perderá el progreso actual.")) {
+    detener();
+    mostrarPantalla("screen-categoria");
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   STATUS UI
+   ═══════════════════════════════════════════════ */
+function setStatus(dot, main, hint) {
+  document.getElementById("status-dot").className = "status-dot " + (dot === "scan" ? "" : dot);
+  document.getElementById("status-main").textContent = main;
+  document.getElementById("status-hint").textContent = hint || "";
+  const bar = document.getElementById("status-bar");
+  bar.className = "status-bar" + (dot === "ok" ? " s-ok" : dot === "err" ? " s-err" : dot === "warn" ? " s-warn" : "");
+}
+
+/* ═══════════════════════════════════════════════
+   SCANNER (html5-qrcode)
+   ═══════════════════════════════════════════════ */
+async function iniciarH5() {
+  await detener();
+  nativo = false;
+  h5scanner = new Html5Qrcode("reader");
+
+  const camW = document.getElementById("cam-section").clientWidth || 360;
+  const qrbox = { width: Math.floor(camW * 0.9), height: 130 };
+
+  const config = {
+    fps: 20,
+    qrbox,
+    videoConstraints: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.ITF,
+      Html5QrcodeSupportedFormats.DATA_MATRIX,
+    ],
+    rememberLastUsedCamera: false,
+    showTorchButtonIfSupported: false,
+  };
+
+  if (!document.getElementById("h5-hide")) {
+    const style = document.createElement("style");
+    style.id = "h5-hide";
+    style.textContent = `#reader__scan_region{display:block!important;}#reader__scan_region img{display:none!important;}#reader__dashboard{display:none!important;}#reader__header_message{display:none!important;}#reader video{width:100%!important;height:100%!important;object-fit:cover!important;}`;
+    document.head.appendChild(style);
+  }
+
+  try {
+    await h5scanner.start({ facingMode: "environment" }, config, onScan, () => {});
+  } catch {
+    try {
+      const cams = await Html5Qrcode.getCameras();
+      if (cams?.length) await h5scanner.start(cams[cams.length - 1].id, config, onScan, () => {});
+      else setStatus("err", "No se encontró cámara", "Usá el botón de ingreso manual");
+    } catch {
+      setStatus("err", "Sin acceso a la cámara", "Verificá los permisos del navegador");
+    }
+  }
+}
+
+async function detener() {
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  if (h5scanner) { try { await h5scanner.stop(); } catch {} h5scanner = null; }
+  const r = document.getElementById("reader");
+  if (r) r.innerHTML = "";
+}
+
+function onScan(txt) {
+  if (escaneando) return;
+  txt = txt.trim();
+  const ahora = Date.now();
+  if (txt === lastTxt && ahora - lastTs < 2000) return;
+  lastTxt = txt; lastTs = ahora;
+
+  const clasificado = clasificarCodigo(txt);
+  if (!clasificado) {
+    setStatus("err", "Código no reconocido", "Buscá una guía 45XXXXXXX o un QR válido");
+    vibrar([100, 60, 100]);
+    setTimeout(() => setStatus("scan", "Buscando código…", "Guía (45XXXXXXX) o QR del paquete"), 2200);
+    return;
+  }
+
+  codigoEscaneado = txt;
+  codigoInfo = clasificado;
+  flashScreen();
+  vibrar(80);
+  const label = clasificado.tipo === "guia" ? clasificado.guia : clasificado.qr_id;
+  toast(`Código capturado: ${label}`, "ok");
+
+  detener();
+  irAPantallaFotos();
+}
+
+/* ═══════════════════════════════════════════════
+   CAPTURA MANUAL DEL CÓDIGO POR FOTO
+   ═══════════════════════════════════════════════ */
+function capturarFotoScan() {
+  const inp = document.getElementById("file-scan");
+  inp.value = "";
+  inp.click();
+}
+
+async function procesarFotoScan(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  toast("Analizando imagen...", "warn");
+
+  const divTemp = document.createElement("div");
+  divTemp.id = "reader-tmp";
+  divTemp.style.display = "none";
+  document.body.appendChild(divTemp);
+  const tmp = new Html5Qrcode("reader-tmp");
+  try {
+    const txt = await tmp.scanFile(file, true);
+    onScan(txt);
+  } catch {
+    toast("No se detectó ningún código en la foto", "err");
+  } finally {
+    try { tmp.clear(); } catch {}
+    document.body.removeChild(divTemp);
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   MODAL MANUAL (simplificado con prompt nativo por brevedad)
+   ═══════════════════════════════════════════════ */
+function abrirManual() {
+  const valor = prompt("Ingresá la guía (9 dígitos, empieza con 45) o pegá el JSON del QR:");
+  if (!valor?.trim()) return;
+  const clasificado = clasificarCodigo(valor.trim());
+  if (!clasificado) {
+    toast("Código inválido", "err");
+    return;
+  }
+  codigoEscaneado = valor.trim();
+  codigoInfo = clasificado;
+  vibrar(80);
+  toast("Código ingresado ✓", "ok");
+  detener();
+  irAPantallaFotos();
+}
+
+/* ═══════════════════════════════════════════════
+   PANTALLA DE FOTOS
+   ═══════════════════════════════════════════════ */
+function irAPantallaFotos() {
+  document.getElementById("box-paquete").classList.remove("lleno");
+  document.getElementById("box-paquete").innerHTML = `<div class="foto-icon">📦</div><div class="foto-label">Foto del paquete completo</div>`;
+  document.getElementById("box-etiqueta").classList.remove("lleno");
+  document.getElementById("box-etiqueta").innerHTML = `<div class="foto-icon">🏷️</div><div class="foto-label">Foto de la etiqueta</div>`;
+  document.getElementById("btn-guardar").disabled = true;
+  mostrarPantalla("screen-foto");
+}
+
+function capturarFotoPaquete() { document.getElementById("file-paquete").value = ""; document.getElementById("file-paquete").click(); }
+function capturarFotoEtiqueta() { document.getElementById("file-etiqueta").value = ""; document.getElementById("file-etiqueta").click(); }
+
+function procesarFotoPaquete(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  fotoPaqueteBlob = file;
+  const url = URL.createObjectURL(file);
+  const box = document.getElementById("box-paquete");
+  box.classList.add("lleno");
+  box.innerHTML = `<img src="${url}"><div class="foto-check">✓</div>`;
+  actualizarStepsFoto();
+  verificarBotonGuardar();
+  vibrar(60);
+}
+
+function procesarFotoEtiqueta(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  fotoEtiquetaBlob = file;
+  const url = URL.createObjectURL(file);
+  const box = document.getElementById("box-etiqueta");
+  box.classList.add("lleno");
+  box.innerHTML = `<img src="${url}"><div class="foto-check">✓</div>`;
+  actualizarStepsFoto();
+  verificarBotonGuardar();
+  vibrar(60);
+}
+
+function actualizarStepsFoto() {
+  if (fotoPaqueteBlob) {
+    document.getElementById("sbf2").className = "step-bubble done";
+    document.getElementById("sbf2").textContent = "✓";
+    document.getElementById("stf2").className = "step-title done";
+    document.getElementById("slf2").className = "step-line done";
+  }
+  if (fotoEtiquetaBlob) {
+    document.getElementById("sbf3").className = "step-bubble done";
+    document.getElementById("sbf3").textContent = "✓";
+    document.getElementById("stf3").className = "step-title done";
+  }
+}
+
+function verificarBotonGuardar() {
+  document.getElementById("btn-guardar").disabled = !(fotoPaqueteBlob && fotoEtiquetaBlob);
+}
+
+function cancelarFotos() {
+  if (confirm("¿Cancelar y volver a elegir categoría?")) {
+    detener();
+    mostrarPantalla("screen-categoria");
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   GUARDAR REGISTRO EN EL BACKEND
+   ═══════════════════════════════════════════════ */
+async function guardarRegistro() {
+  if (!fotoPaqueteBlob || !fotoEtiquetaBlob || !codigoEscaneado || !categoriaActual) return;
+
+  const btn = document.getElementById("btn-guardar");
+  btn.disabled = true;
+  btn.textContent = "Guardando...";
+
+  logSeq++;
+  const id = "li" + logSeq;
+  const hora = new Date().toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const label = codigoInfo.tipo === "guia" ? "GUÍA " + codigoInfo.guia : "ID " + codigoInfo.qr_id;
+
+  document.getElementById("log-empty").style.display = "none";
+  const log = document.getElementById("log");
+  const item = document.createElement("div");
+  item.className = "log-item sending";
+  item.id = id;
+  item.innerHTML = `
+    <div class="log-ico" id="${id}-ico"><span class="spin">⟳</span></div>
+    <div class="log-info">
+      <div class="log-nombre">📦 [${categoriaActual}] ${label}</div>
+      <div class="log-sub" id="${id}-sub">Subiendo fotos...</div>
+    </div>
+    <div class="log-ts">${hora}</div>
+  `;
+  log.prepend(item);
+
+  try {
+    const formData = new FormData();
+    formData.append("categoria", categoriaActual);
+    formData.append("codigo", codigoEscaneado);
+    formData.append("foto_paquete", fotoPaqueteBlob, "paquete.jpg");
+    formData.append("foto_etiqueta", fotoEtiquetaBlob, "etiqueta.jpg");
+
+    const res = await fetch(`${API_BASE}/aforo/registro`, { method: "POST", body: formData });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Error desconocido" }));
+      throw new Error(err.detail || "Error al guardar");
+    }
+    const data = await res.json();
+
+    contadorHoy++;
+    document.getElementById("cnt").textContent = contadorHoy;
+    document.getElementById(id + "-ico").innerHTML = "✅";
+    document.getElementById(id + "-sub").textContent = `✓ Guardado — Peso: ${data.peso}kg`;
+    item.className = "log-item ok";
+    toast("Registro guardado exitosamente", "ok");
+    flashScreen();
+    vibrar([60, 40, 80]);
+
+    mostrarPantalla("screen-categoria");
+
+  } catch (err) {
+    document.getElementById(id + "-ico").innerHTML = "❌";
+    document.getElementById(id + "-sub").textContent = "Error: " + err.message;
+    item.className = "log-item err";
+    toast("Error al guardar: " + err.message, "err");
+    btn.disabled = false;
+    btn.textContent = "Guardar registro";
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   INIT
+   ═══════════════════════════════════════════════ */
+(async () => {
+  document.getElementById("log").addEventListener("click", () => {}); // noop, evita warning lint
+  await cargarCategorias();
+})();
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    });
+  }
+</script>
+
+</body>
+</html>
