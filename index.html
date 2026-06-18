@@ -451,6 +451,8 @@ function elegirCategoria(letra) {
   categoriaActual = letra;
   codigoEscaneado = null;
   codigoInfo = null;
+  if (urlPaqueteActiva)  { URL.revokeObjectURL(urlPaqueteActiva);  urlPaqueteActiva  = null; }
+  if (urlEtiquetaActiva) { URL.revokeObjectURL(urlEtiquetaActiva); urlEtiquetaActiva = null; }
   fotoPaqueteBlob = null;
   fotoEtiquetaBlob = null;
   modoEscaneo = "guia";
@@ -686,30 +688,85 @@ function irAPantallaFotos() {
 function capturarFotoPaquete() { document.getElementById("file-paquete").value = ""; document.getElementById("file-paquete").click(); }
 function capturarFotoEtiqueta() { document.getElementById("file-etiqueta").value = ""; document.getElementById("file-etiqueta").click(); }
 
+/* ═══════════════════════════════════════════════
+   COMPRESIÓN DE FOTOS EN EL NAVEGADOR
+   Redimensiona a máx 1280px y calidad JPEG 82%
+   Resultado: ~200-400KB por foto, nitidez buena para ver etiquetas
+   ═══════════════════════════════════════════════ */
+function comprimirFoto(file, callback) {
+  const MAX_PX = 1280;
+  const CALIDAD = 0.82;
+
+  const img = new Image();
+  const blobUrl = URL.createObjectURL(file);
+
+  img.onload = function() {
+    URL.revokeObjectURL(blobUrl); // liberar memoria del blob original
+
+    let w = img.naturalWidth;
+    let h = img.naturalHeight;
+
+    // Escalar manteniendo proporción
+    if (w > MAX_PX || h > MAX_PX) {
+      if (w > h) { h = Math.round(h * MAX_PX / w); w = MAX_PX; }
+      else        { w = Math.round(w * MAX_PX / h); h = MAX_PX; }
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width  = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, w, h);
+
+    canvas.toBlob(
+      (blob) => callback(blob, URL.createObjectURL(blob)),
+      "image/jpeg",
+      CALIDAD
+    );
+  };
+
+  img.onerror = function() {
+    URL.revokeObjectURL(blobUrl);
+    callback(file, URL.createObjectURL(file)); // fallback: usar original si falla la compresión
+  };
+
+  img.src = blobUrl;
+}
+
+// URLs activas de las fotos (para revocarlas al limpiar y liberar RAM)
+let urlPaqueteActiva = null;
+let urlEtiquetaActiva = null;
+
 function procesarFotoPaquete(event) {
   const file = event.target.files[0];
   if (!file) return;
-  fotoPaqueteBlob = file;
-  const url = URL.createObjectURL(file);
-  const box = document.getElementById("box-paquete");
-  box.classList.add("lleno");
-  box.innerHTML = `<img src="${url}"><div class="foto-check">✓</div>`;
-  actualizarStepsFoto();
-  verificarBotonGuardar();
-  vibrar(60);
+  comprimirFoto(file, (blob, url) => {
+    if (urlPaqueteActiva) URL.revokeObjectURL(urlPaqueteActiva);
+    urlPaqueteActiva = url;
+    fotoPaqueteBlob = blob;
+    const box = document.getElementById("box-paquete");
+    box.classList.add("lleno");
+    box.innerHTML = `<img src="${url}"><div class="foto-check">✓</div>`;
+    actualizarStepsFoto();
+    verificarBotonGuardar();
+    vibrar(60);
+  });
 }
 
 function procesarFotoEtiqueta(event) {
   const file = event.target.files[0];
   if (!file) return;
-  fotoEtiquetaBlob = file;
-  const url = URL.createObjectURL(file);
-  const box = document.getElementById("box-etiqueta");
-  box.classList.add("lleno");
-  box.innerHTML = `<img src="${url}"><div class="foto-check">✓</div>`;
-  actualizarStepsFoto();
-  verificarBotonGuardar();
-  vibrar(60);
+  comprimirFoto(file, (blob, url) => {
+    if (urlEtiquetaActiva) URL.revokeObjectURL(urlEtiquetaActiva);
+    urlEtiquetaActiva = url;
+    fotoEtiquetaBlob = blob;
+    const box = document.getElementById("box-etiqueta");
+    box.classList.add("lleno");
+    box.innerHTML = `<img src="${url}"><div class="foto-check">✓</div>`;
+    actualizarStepsFoto();
+    verificarBotonGuardar();
+    vibrar(60);
+  });
 }
 
 function actualizarStepsFoto() {
